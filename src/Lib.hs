@@ -1,8 +1,13 @@
 {-# LANGUAGE OverloadedStrings #-}
 
 module Lib
-    ( userAgentParser
-    , iosVariant
+    ( Mushroom(..)
+    , OS(..)
+    , UserAgent(..)
+    , Variant(..)
+    , Version(..)
+
+    , userAgentParser
     ) where
 
 import Control.Applicative
@@ -69,9 +74,7 @@ androidVariant = readParser
    "UIAUTOMATIONDEBUG", "PERF", "WILDCARD", "NorthStar"]
 
 mushroomParser :: Parser Mushroom
-mushroomParser = do
-  string "V/"
-  readParser ["MUSHROOM", "SNAPSHOT", "OG"]
+mushroomParser = "V/" *> readParser ["MUSHROOM", "SNAPSHOT", "OG"]
 
 iosParser :: Parser UserAgent
 iosParser = do
