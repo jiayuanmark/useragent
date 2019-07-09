@@ -1,7 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 
 module Lib
-    ( Mushroom(..)
+    ( Flavor(..)
     , OS(..)
     , UserAgent(..)
     , Variant(..)
@@ -15,19 +15,19 @@ import Data.Attoparsec.ByteString.Char8
 import Data.ByteString.Char8 (ByteString, unpack)
 import Data.Maybe
 
-data Variant = ALPHA
-             | Alpha
-             | Beta
-             | DEBUG
-             | MASTER
-             | Master
-             | PERF
-             | PROFILE
-             | UIAUTOMATION
-             | UIAUTOMATIONDEBUG
-             | WILDCARD
-             | NorthStar
-             deriving (Eq, Show, Read)
+data Flavor = ALPHA
+            | Alpha
+            | Beta
+            | DEBUG
+            | MASTER
+            | Master
+            | PERF
+            | PROFILE
+            | UIAUTOMATION
+            | UIAUTOMATIONDEBUG
+            | WILDCARD
+            | NorthStar
+            deriving (Eq, Show, Read)
 
 data Version = Version { major  :: Int
                        , minor  :: Int
@@ -37,13 +37,16 @@ data Version = Version { major  :: Int
 
 data OS = Android ByteString | IOS ByteString deriving (Eq, Show)
 
-data Mushroom = MUSHROOM | SNAPSHOT | OG deriving (Eq, Show, Read)
+data Variant = MUSHROOM | SNAPSHOT | OG deriving (Eq, Show, Read)
 
-data UserAgent = UserAgent { version  :: Version
-                           , variant  :: Maybe Variant
-                           , device   :: ByteString
-                           , os       :: OS
-                           , mushroom :: Maybe Mushroom
+data GAESuffix = AppEngine { projectID :: ByteString } deriving (Eq, Show)
+
+data UserAgent = UserAgent { version :: Version
+                           , flavor  :: Maybe Flavor
+                           , device  :: ByteString
+                           , os      :: OS
+                           , variant :: Maybe Variant
+                           , suffix  :: Maybe GAESuffix
                            } deriving (Eq, Show)
 
 userAgentParser :: Parser UserAgent
@@ -64,24 +67,31 @@ readParser vs = do
   variant <- choice (map string vs)
   return . read . unpack $ variant
 
-iosVariant :: Parser Variant
-iosVariant = readParser
+iosFlavor :: Parser Flavor
+iosFlavor = readParser
   ["Alpha", "Beta", "DEBUG", "Master", "WILDCARD", "PERF"]
 
-androidVariant :: Parser Variant
-androidVariant = readParser
+androidFlavor :: Parser Flavor
+androidFlavor = readParser
   ["ALPHA", "Beta", "DEBUG", "PROFILE", "MASTER", "UIAUTOMATION",
    "UIAUTOMATIONDEBUG", "PERF", "WILDCARD", "NorthStar"]
 
-mushroomParser :: Parser Mushroom
-mushroomParser = "V/" *> readParser ["MUSHROOM", "SNAPSHOT", "OG"]
+variantParser :: Parser Variant
+variantParser = "V/" *> readParser ["MUSHROOM", "SNAPSHOT", "OG"]
+
+gaeSuffixParser :: Parser GAESuffix
+gaeSuffixParser = do
+  string "AppEngine-Google; (+http://code.google.com/appengine; appid: "
+  projectID <- takeTill (== ')')
+  char ')'
+  return (AppEngine projectID)
 
 iosParser :: Parser UserAgent
 iosParser = do
   string "Snapchat/"
   version <- versionParser
   skipSpace
-  variant <- option Nothing (Just <$> iosVariant)
+  flavor <- option Nothing (Just <$> iosFlavor)
   skipSpace
   char '('
   device <- takeTill (== ';')
@@ -93,14 +103,15 @@ iosParser = do
   char ';'
   skipSpace
   string "gzip)"
-  return (UserAgent version variant device (IOS os) Nothing)
+  suffix <- option Nothing (Just <$> (skipSpace *> gaeSuffixParser))
+  return (UserAgent version flavor device (IOS os) Nothing suffix)
 
 androidParser :: Parser UserAgent
 androidParser = do
   string "Snapchat/"
   version <- versionParser
   skipSpace
-  variant <- option Nothing (Just <$> androidVariant)
+  flavor <- option Nothing (Just <$> androidFlavor)
   skipSpace
   char '('
   device <- takeTill (== ';')
@@ -112,5 +123,6 @@ androidParser = do
   char ';'
   skipSpace
   string "gzip)"
-  mushroom <- option Nothing (Just <$> (skipSpace *> mushroomParser))
-  return (UserAgent version variant device (Android os) mushroom)
+  variant <- option Nothing (Just <$> (skipSpace *> variantParser))
+  suffix <- option Nothing (Just <$> (skipSpace *> gaeSuffixParser))
+  return (UserAgent version flavor device (Android os) variant suffix)
